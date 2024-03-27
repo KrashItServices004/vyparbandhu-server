@@ -4,9 +4,79 @@ const app = express()
 const cors = require('cors');
 const LoginModal = require('../model/loginModal');
 app.use(cors())
+const path = require("path");
+const fs = require('fs')
+
+const multer = require('multer')
 
 const router = express.Router();
 
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, path.join(__dirname, 'Documents')); // Destination folder for storing files
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname); // Filename with timestamp to avoid overwriting
+    }
+});
+
+const upload = multer({ storage: storage });
+
+
+
+router.post('/addDocuments', upload.single('file'), async (req, res) => {
+    const {  name, id } = req.body;
+
+    try {
+        const existingData = await LoginModal.findById(id);
+
+        if (!existingData) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+        const filePath = path.relative(path.join(__dirname, 'Documents'), req.file.path);
+        existingData.documents.push({ image:filePath, name:name });
+
+        await existingData.save();
+
+        res.status(200).json({ message: 'Documents updated successfully', user: existingData });
+    } catch (error) {
+        console.error('Error updating documents:', error);
+        res.status(500).json({ error: 'Failed to update documents' });
+    }
+});
+
+router.post('/profileImage', upload.single('file'), async (req, res) => {
+    const {   id } = req.body;
+
+    try {
+        const existingData = await LoginModal.findById(id);
+
+        if (!existingData) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+        const filePath = path.relative(path.join(__dirname, 'Documents'), req.file.path);
+        existingData.image= filePath;
+
+        await existingData.save();
+
+        res.status(200).json({ message: 'Documents updated successfully', user: existingData });
+    } catch (error) {
+        console.error('Error updating documents:', error);
+        res.status(500).json({ error: 'Failed to update documents' });
+    }
+});
+
+router.get('/file/:filename', (req, res) => {
+    const fileName = req.params.filename;
+    res.sendFile(__dirname + `/Documents/${fileName}`);
+}); 
 
 router.post('/createAccount', async (req, res) => {
     const { email, name, number, password } = req.body;
@@ -22,7 +92,7 @@ router.post('/createAccount', async (req, res) => {
         }
         else {
 
-            const newDoc = new LoginModal({ name: name, email: email, password: password, number: number });
+            const newDoc = new LoginModal({ name: name, email: email, password: password, number: number , image:'' });
 
             await newDoc.save();
 
@@ -37,7 +107,7 @@ router.post('/createAccount', async (req, res) => {
 router.post('/ForgotPassword', async (req, res) => {
     const { email, password } = req.body;
 
-        try {
+    try {
         const existingData = await LoginModal.findOne({ email });
         if (!existingData) {
             return res.status(400).send({ error: 'Email does not exist' });
@@ -152,7 +222,7 @@ router.post('/deleteDocument', async (req, res) => {
 
     try {
         // Find the user by ID
-        const existingData = await LoginModal.findById({_id:userId});
+        const existingData = await LoginModal.findById({ _id: userId });
 
         if (!existingData) {
             return res.status(404).json({ error: 'User not found' });
